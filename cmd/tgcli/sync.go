@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/spf13/cobra"
-	"github.com/RandyVentures/tgcli/internal/out"
 )
 
 func newSyncCmd(flags *rootFlags) *cobra.Command {
@@ -14,78 +15,49 @@ func newSyncCmd(flags *rootFlags) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "sync",
-		Short: "Sync messages (requires prior auth)",
+		Short: "Listen for incoming messages",
+		Long: `Listens for incoming messages and stores them locally.
+
+Use --follow to continuously listen. Without --follow, exits after receiving
+the first batch of updates.
+
+Note: Bot API only receives messages sent TO the bot, not all messages in a chat.
+For group chats, the bot must be a member and have privacy mode disabled
+(talk to @BotFather: /setprivacy -> Disable).`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.Background()
+			ctx, cancel := context.WithCancel(cmd.Context())
+			defer cancel()
+
+			// Handle interrupt
+			sigCh := make(chan os.Signal, 1)
+			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+			go func() {
+				<-sigCh
+				fmt.Println("\nStopping...")
+				cancel()
+			}()
+
 			a, lk, err := newApp(ctx, flags, true, false)
 			if err != nil {
 				return err
 			}
 			defer closeApp(a, lk)
 
-			tgClient := a.TGClient()
-			if tgClient == nil {
-				return fmt.Errorf("telegram client not initialized")
-			}
-
-			// Check if authenticated
-			authed, err := tgClient.IsAuthed(ctx)
+			client, err := a.Client()
 			if err != nil {
-				return wrapErr(err, "check auth status")
-			}
-			if !authed {
-				return fmt.Errorf("not authenticated. Run 'tgcli auth' first")
+				return err
 			}
 
-			if !flags.asJSON {
-				fmt.Println("📥 Syncing dialogs...")
-			}
-
-			// Sync dialogs
-			if err := tgClient.SyncDialogs(ctx); err != nil {
-				return wrapErr(err, "sync dialogs failed")
-			}
-
-			// Sync recent messages for each chat
-			chats, err := a.Store().ListChats()
-			if err != nil {
-				return wrapErr(err, "list chats failed")
-			}
-
-			if !flags.asJSON {
-				fmt.Printf("📥 Syncing messages for %d chats...\n", len(chats))
-			}
-
-			for i, chat := range chats {
-				if !flags.asJSON {
-					fmt.Printf("  [%d/%d] %s\n", i+1, len(chats), chat.Title)
-				}
-				if err := tgClient.SyncChatHistory(ctx, chat.ID, 50); err != nil {
-					fmt.Fprintf(os.Stderr, "  Warning: failed to sync %s: %v\n", chat.Title, err)
-					continue
-				}
-			}
-
-			if flags.asJSON {
-				return out.WriteJSON(os.Stdout, map[string]interface{}{
-					"status":      "synced",
-					"chats_count": len(chats),
-				})
-			}
-
-			fmt.Println()
-			fmt.Println("✅ Sync complete!")
-			fmt.Printf("📊 Synced %d chats\n", len(chats))
-
-			if follow {
-				fmt.Println()
-				fmt.Println("👂 Continuous sync mode (--follow) not implemented in Phase 1")
-			}
-
-			return nil
+			return client.Sync(ctx, struct {
+				Follow  bool
+				Timeout int
+			}{
+				Follow:  follow,
+				Timeout: 60,
+			})
 		},
 	}
 
-	cmd.Flags().BoolVar(&follow, "follow", false, "continuous sync (stay connected) - not implemented in Phase 1")
+	cmd.Flags().BoolVar(&follow, "follow", false, "continuously listen for messages")
 	return cmd
 }

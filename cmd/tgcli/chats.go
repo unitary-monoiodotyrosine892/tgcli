@@ -1,14 +1,12 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
-	"github.com/RandyVentures/tgcli/internal/out"
 )
 
 func newChatsCmd(flags *rootFlags) *cobra.Command {
@@ -18,134 +16,82 @@ func newChatsCmd(flags *rootFlags) *cobra.Command {
 	}
 
 	cmd.AddCommand(newChatsListCmd(flags))
-	cmd.AddCommand(newChatsInfoCmd(flags))
 
 	return cmd
 }
 
 func newChatsListCmd(flags *rootFlags) *cobra.Command {
-	return &cobra.Command{
+	var limit int
+
+	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List all chats (DMs, groups, channels)",
+		Short: "List all chats from local database",
+		Long: `Lists chats stored in the local database.
+
+Note: Chats are only stored after receiving messages via 'tgcli sync'.
+Run 'tgcli sync --follow' to populate the database with incoming messages.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.Background()
-			a, lk, err := newApp(ctx, flags, true, false)
+			ctx, cancel := withTimeout(cmd.Context(), flags)
+			defer cancel()
+
+			a, lk, err := newApp(ctx, flags, false, true)
 			if err != nil {
 				return err
 			}
 			defer closeApp(a, lk)
 
-			chats, err := a.Store().ListChats()
+			chats, err := a.Store().ListChats(limit)
 			if err != nil {
-				return wrapErr(err, "list chats")
+				return fmt.Errorf("list chats: %w", err)
 			}
 
-			if flags.asJSON {
-				return out.WriteJSON(os.Stdout, map[string]interface{}{
-					"chats": chats,
-					"count": len(chats),
-				})
-			}
-
-			// Human-readable output
 			if len(chats) == 0 {
-				fmt.Println("No chats found. Run 'tgcli sync' to fetch chats.")
+				if flags.asJSON {
+					return writeJSON(os.Stdout, []interface{}{})
+				}
+				fmt.Println("No chats found. Run 'tgcli sync --follow' to receive messages.")
 				return nil
 			}
 
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "ID\tType\tTitle\tUsername\tLast Message")
-			fmt.Fprintln(w, "--\t----\t-----\t--------\t------------")
-
-			for _, chat := range chats {
-				username := chat.Username
-				if username == "" {
-					username = "-"
-				}
-
-				lastMsg := "-"
-				if chat.LastMessageTs > 0 {
-					lastMsg = formatTimestamp(chat.LastMessageTs)
-				}
-
-				fmt.Fprintf(w, "%d\t%s\t%s\t%s\t%s\n",
-					chat.ID,
-					chat.Type,
-					chat.Title,
-					username,
-					lastMsg,
-				)
-			}
-
-			w.Flush()
-			fmt.Printf("\nTotal: %d chats\n", len(chats))
-
-			return nil
-		},
-	}
-}
-
-func newChatsInfoCmd(flags *rootFlags) *cobra.Command {
-	var chatID int64
-
-	cmd := &cobra.Command{
-		Use:   "info",
-		Short: "Show chat details",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.Background()
-			a, lk, err := newApp(ctx, flags, true, false)
-			if err != nil {
-				return err
-			}
-			defer closeApp(a, lk)
-
-			chat, err := a.Store().GetChat(chatID)
-			if err != nil {
-				return wrapErr(err, "get chat")
-			}
-
 			if flags.asJSON {
-				return out.WriteJSON(os.Stdout, chat)
+				return writeJSON(os.Stdout, chats)
 			}
 
-			// Human-readable output
-			fmt.Printf("Chat ID: %d\n", chat.ID)
-			fmt.Printf("Type: %s\n", chat.Type)
-			fmt.Printf("Title: %s\n", chat.Title)
-			if chat.Username != "" {
-				fmt.Printf("Username: @%s\n", chat.Username)
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "ID\tTYPE\tTITLE\tLAST MESSAGE")
+			for _, chat := range chats {
+				lastMsg := "never"
+				if chat.LastMessageTS > 0 {
+					lastMsg = formatTimeAgo(chat.LastMessageTS)
+				}
+				title := chat.Title
+				if title == "" {
+					title = "(no title)"
+				}
+				fmt.Fprintf(w, "%d\t%s\t%s\t%s\n", chat.ID, chat.Type, title, lastMsg)
 			}
-			if chat.LastMessageTs > 0 {
-				fmt.Printf("Last Message: %s\n", formatTimestamp(chat.LastMessageTs))
-			}
-			if chat.UnreadCount > 0 {
-				fmt.Printf("Unread: %d\n", chat.UnreadCount)
-			}
+			w.Flush()
 
 			return nil
 		},
 	}
 
-	cmd.Flags().Int64Var(&chatID, "chat", 0, "chat ID (required)")
-	_ = cmd.MarkFlagRequired("chat")
-
+	cmd.Flags().IntVar(&limit, "limit", 50, "max chats to show")
 	return cmd
 }
 
-func formatTimestamp(ts int64) string {
+func formatTimeAgo(ts int64) string {
 	t := time.Unix(ts, 0)
-	now := time.Now()
+	d := time.Since(t)
 
-	// If today, show time
-	if t.Year() == now.Year() && t.YearDay() == now.YearDay() {
-		return t.Format("15:04")
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm ago", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh ago", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd ago", int(d.Hours()/24))
 	}
-
-	// If this year, show date without year
-	if t.Year() == now.Year() {
-		return t.Format("Jan 2 15:04")
-	}
-
-	// Otherwise show full date
-	return t.Format("2006-01-02 15:04")
 }

@@ -9,7 +9,7 @@ import (
 func newMediaCmd(flags *rootFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "media",
-		Short: "Media operations (download)",
+		Short: "Media operations",
 	}
 
 	cmd.AddCommand(newMediaDownloadCmd(flags))
@@ -18,22 +18,15 @@ func newMediaCmd(flags *rootFlags) *cobra.Command {
 }
 
 func newMediaDownloadCmd(flags *rootFlags) *cobra.Command {
-	var chatID int64
-	var messageID int
-
 	cmd := &cobra.Command{
 		Use:   "download",
-		Short: "Download media from message",
+		Short: "Download media from message (not yet implemented)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Printf("🚧 Download media from message %d in chat %d - coming soon\n", messageID, chatID)
+			fmt.Println("Media download not yet implemented.")
+			fmt.Println("Bot API media download requires file_id from received messages.")
 			return nil
 		},
 	}
-
-	cmd.Flags().Int64Var(&chatID, "chat", 0, "chat ID (required)")
-	cmd.Flags().IntVar(&messageID, "message-id", 0, "message ID (required)")
-	_ = cmd.MarkFlagRequired("chat")
-	_ = cmd.MarkFlagRequired("message-id")
 
 	return cmd
 }

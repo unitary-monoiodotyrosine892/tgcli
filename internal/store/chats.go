@@ -1,77 +1,103 @@
 package store
 
 import (
-	"database/sql"
 	"fmt"
 	"time"
 )
 
-// Chat represents a Telegram chat (user, group, channel, etc).
+// Chat represents a chat in the database.
 type Chat struct {
-	ID            int64  `json:"id"`
-	Type          string `json:"type"`
-	Title         string `json:"title"`
-	Username      string `json:"username,omitempty"`
-	LastMessageID int    `json:"last_message_id,omitempty"`
-	LastMessageTs int64  `json:"last_message_ts,omitempty"`
-	UnreadCount   int    `json:"unread_count,omitempty"`
+	ID            int64
+	Type          string
+	Title         string
+	Username      string
+	LastMessageID int64
+	LastMessageTS int64
+	UnreadCount   int
+	UpdatedAt     int64
 }
 
 // UpsertChat inserts or updates a chat.
-func (s *Store) UpsertChat(chat *Chat) error {
+func (s *Store) UpsertChat(id int64, chatType, title, username string) error {
 	now := time.Now().UTC().Unix()
-	
 	_, err := s.db.Exec(`
-		INSERT INTO chats (id, type, title, username, last_message_id, last_message_ts, unread_count, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO chats (id, type, title, username, updated_at)
+		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			type = excluded.type,
 			title = excluded.title,
 			username = excluded.username,
-			last_message_id = excluded.last_message_id,
-			last_message_ts = excluded.last_message_ts,
-			unread_count = excluded.unread_count,
 			updated_at = excluded.updated_at
-	`, chat.ID, chat.Type, chat.Title, chat.Username, chat.LastMessageID, chat.LastMessageTs, chat.UnreadCount, now)
-	
-	return err
+	`, id, chatType, title, username, now)
+	if err != nil {
+		return fmt.Errorf("upsert chat: %w", err)
+	}
+	return nil
 }
 
 // GetChat retrieves a chat by ID.
 func (s *Store) GetChat(id int64) (*Chat, error) {
+	row := s.db.QueryRow(`
+		SELECT id, type, title, username, last_message_id, last_message_ts, unread_count, updated_at
+		FROM chats WHERE id = ?
+	`, id)
+
 	var chat Chat
-	err := s.db.QueryRow(`
-		SELECT id, type, title, username, last_message_id, last_message_ts, unread_count
-		FROM chats
-		WHERE id = ?
-	`, id).Scan(&chat.ID, &chat.Type, &chat.Title, &chat.Username, &chat.LastMessageID, &chat.LastMessageTs, &chat.UnreadCount)
-	
-	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("chat not found: %d", id)
+	var lastMsgID, lastMsgTS *int64
+	err := row.Scan(&chat.ID, &chat.Type, &chat.Title, &chat.Username, &lastMsgID, &lastMsgTS, &chat.UnreadCount, &chat.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("get chat: %w", err)
 	}
-	return &chat, err
+	if lastMsgID != nil {
+		chat.LastMessageID = *lastMsgID
+	}
+	if lastMsgTS != nil {
+		chat.LastMessageTS = *lastMsgTS
+	}
+	return &chat, nil
 }
 
-// ListChats returns all chats ordered by last message timestamp.
-func (s *Store) ListChats() ([]*Chat, error) {
+// ListChats returns all chats ordered by last message.
+func (s *Store) ListChats(limit int) ([]Chat, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+
 	rows, err := s.db.Query(`
-		SELECT id, type, title, username, last_message_id, last_message_ts, unread_count
+		SELECT id, type, title, username, last_message_id, last_message_ts, unread_count, updated_at
 		FROM chats
-		ORDER BY last_message_ts DESC
-	`)
+		ORDER BY COALESCE(last_message_ts, updated_at) DESC
+		LIMIT ?
+	`, limit)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list chats: %w", err)
 	}
 	defer rows.Close()
 
-	var chats []*Chat
+	var chats []Chat
 	for rows.Next() {
 		var chat Chat
-		if err := rows.Scan(&chat.ID, &chat.Type, &chat.Title, &chat.Username, &chat.LastMessageID, &chat.LastMessageTs, &chat.UnreadCount); err != nil {
-			return nil, err
+		var lastMsgID, lastMsgTS *int64
+		if err := rows.Scan(&chat.ID, &chat.Type, &chat.Title, &chat.Username, &lastMsgID, &lastMsgTS, &chat.UnreadCount, &chat.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan chat: %w", err)
 		}
-		chats = append(chats, &chat)
+		if lastMsgID != nil {
+			chat.LastMessageID = *lastMsgID
+		}
+		if lastMsgTS != nil {
+			chat.LastMessageTS = *lastMsgTS
+		}
+		chats = append(chats, chat)
 	}
-	
+
 	return chats, rows.Err()
+}
+
+// UpdateChatLastMessage updates the last message info for a chat.
+func (s *Store) UpdateChatLastMessage(chatID, messageID int64, timestamp int64) error {
+	_, err := s.db.Exec(`
+		UPDATE chats SET last_message_id = ?, last_message_ts = ?, updated_at = ?
+		WHERE id = ?
+	`, messageID, timestamp, time.Now().UTC().Unix(), chatID)
+	return err
 }

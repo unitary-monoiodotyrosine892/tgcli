@@ -1,23 +1,21 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
-	"github.com/RandyVentures/tgcli/internal/out"
+	"github.com/RandyVentures/tgcli/internal/tg"
 )
 
 func newSendCmd(flags *rootFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "send",
-		Short: "Send messages (text, file, reaction)",
+		Short: "Send messages (text, file)",
 	}
 
 	cmd.AddCommand(newSendTextCmd(flags))
 	cmd.AddCommand(newSendFileCmd(flags))
-	cmd.AddCommand(newSendReactionCmd(flags))
 
 	return cmd
 }
@@ -31,42 +29,39 @@ func newSendTextCmd(flags *rootFlags) *cobra.Command {
 		Use:   "text",
 		Short: "Send text message",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx := context.Background()
-			a, lk, err := newApp(ctx, flags, true, false)
+			ctx, cancel := withTimeout(cmd.Context(), flags)
+			defer cancel()
+
+			a, lk, err := newApp(ctx, flags, false, false)
 			if err != nil {
 				return err
 			}
 			defer closeApp(a, lk)
 
-			tgClient := a.TGClient()
-			if tgClient == nil {
-				return fmt.Errorf("telegram client not initialized")
+			client, err := a.Client()
+			if err != nil {
+				return err
 			}
 
-			// Check if authenticated
-			authed, err := tgClient.IsAuthed(ctx)
+			sent, err := client.SendText(tg.SendTextOptions{
+				ChatID:  to,
+				Text:    message,
+				ReplyTo: replyTo,
+			})
 			if err != nil {
-				return wrapErr(err, "check auth status")
-			}
-			if !authed {
-				return fmt.Errorf("not authenticated. Run 'tgcli auth' first")
-			}
-
-			// Send message
-			msgID, err := tgClient.SendTextMessage(ctx, to, message, replyTo)
-			if err != nil {
-				return wrapErr(err, "send message failed")
+				return err
 			}
 
 			if flags.asJSON {
-				return out.WriteJSON(os.Stdout, map[string]interface{}{
-					"status":     "sent",
-					"message_id": msgID,
-					"chat_id":    to,
+				return writeJSON(os.Stdout, map[string]interface{}{
+					"message_id": sent.MessageID,
+					"chat_id":    sent.Chat.ID,
+					"text":       sent.Text,
+					"date":       sent.Date,
 				})
 			}
 
-			fmt.Printf("✅ Message sent (ID: %d)\n", msgID)
+			fmt.Printf("✅ Message sent (ID: %d)\n", sent.MessageID)
 			return nil
 		},
 	}
@@ -84,43 +79,64 @@ func newSendFileCmd(flags *rootFlags) *cobra.Command {
 	var to int64
 	var file string
 	var caption string
+	var asPhoto bool
 
 	cmd := &cobra.Command{
 		Use:   "file",
-		Short: "Send file (not implemented in Phase 1)",
+		Short: "Send file or photo",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("file sending not implemented in Phase 1")
+			ctx, cancel := withTimeout(cmd.Context(), flags)
+			defer cancel()
+
+			a, lk, err := newApp(ctx, flags, false, false)
+			if err != nil {
+				return err
+			}
+			defer closeApp(a, lk)
+
+			client, err := a.Client()
+			if err != nil {
+				return err
+			}
+
+			var sent interface{}
+			if asPhoto {
+				s, err := client.SendPhoto(tg.SendPhotoOptions{
+					ChatID:   to,
+					FilePath: file,
+					Caption:  caption,
+				})
+				if err != nil {
+					return err
+				}
+				sent = s
+			} else {
+				s, err := client.SendFile(tg.SendFileOptions{
+					ChatID:   to,
+					FilePath: file,
+					Caption:  caption,
+				})
+				if err != nil {
+					return err
+				}
+				sent = s
+			}
+
+			if flags.asJSON {
+				return writeJSON(os.Stdout, sent)
+			}
+
+			fmt.Println("✅ File sent successfully")
+			return nil
 		},
 	}
 
 	cmd.Flags().Int64Var(&to, "to", 0, "recipient chat ID (required)")
 	cmd.Flags().StringVar(&file, "file", "", "file path (required)")
 	cmd.Flags().StringVar(&caption, "caption", "", "file caption (optional)")
+	cmd.Flags().BoolVar(&asPhoto, "photo", false, "send as photo instead of document")
 	_ = cmd.MarkFlagRequired("to")
 	_ = cmd.MarkFlagRequired("file")
-
-	return cmd
-}
-
-func newSendReactionCmd(flags *rootFlags) *cobra.Command {
-	var chatID int64
-	var messageID int
-	var emoji string
-
-	cmd := &cobra.Command{
-		Use:   "reaction",
-		Short: "Send reaction to message (not implemented in Phase 1)",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return fmt.Errorf("reactions not implemented in Phase 1")
-		},
-	}
-
-	cmd.Flags().Int64Var(&chatID, "chat", 0, "chat ID (required)")
-	cmd.Flags().IntVar(&messageID, "message-id", 0, "message ID (required)")
-	cmd.Flags().StringVar(&emoji, "emoji", "", "emoji reaction (required)")
-	_ = cmd.MarkFlagRequired("chat")
-	_ = cmd.MarkFlagRequired("message-id")
-	_ = cmd.MarkFlagRequired("emoji")
 
 	return cmd
 }

@@ -1,68 +1,106 @@
 package tg
 
 import (
-	"context"
 	"fmt"
-	"math/rand"
+	"os"
 
-	"github.com/gotd/td/tg"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
-// SendTextMessage sends a text message to a chat.
-func (c *Client) SendTextMessage(ctx context.Context, chatID int64, text string, replyToMsgID int) (int, error) {
-	var sentMsgID int
+// SendTextOptions for sending text messages.
+type SendTextOptions struct {
+	ChatID  int64
+	Text    string
+	ReplyTo int
+}
 
-	err := c.Run(ctx, func(ctx context.Context, api *tg.Client) error {
-		// Get chat to determine peer type
-		chat, err := c.store.GetChat(chatID)
-		if err != nil {
-			return fmt.Errorf("get chat: %w", err)
-		}
+// SendText sends a text message.
+func (c *Client) SendText(opts SendTextOptions) (*tgbotapi.Message, error) {
+	msg := tgbotapi.NewMessage(opts.ChatID, opts.Text)
+	if opts.ReplyTo != 0 {
+		msg.ReplyToMessageID = opts.ReplyTo
+	}
 
-		var inputPeer tg.InputPeerClass
-		switch chat.Type {
-		case "user":
-			inputPeer = &tg.InputPeerUser{UserID: chatID}
-		case "group":
-			inputPeer = &tg.InputPeerChat{ChatID: chatID}
-		case "channel", "supergroup":
-			inputPeer = &tg.InputPeerChannel{ChannelID: chatID}
-		default:
-			return fmt.Errorf("unknown chat type: %s", chat.Type)
-		}
+	sent, err := c.bot.Send(msg)
+	if err != nil {
+		return nil, fmt.Errorf("send message: %w", err)
+	}
 
-		req := &tg.MessagesSendMessageRequest{
-			Peer:     inputPeer,
-			Message:  text,
-			RandomID: rand.Int63(),
-		}
+	return &sent, nil
+}
 
-		if replyToMsgID != 0 {
-			req.ReplyTo = &tg.InputReplyToMessage{
-				ReplyToMsgID: replyToMsgID,
-			}
-		}
+// SendFileOptions for sending files.
+type SendFileOptions struct {
+	ChatID   int64
+	FilePath string
+	Caption  string
+	ReplyTo  int
+}
 
-		updates, err := api.MessagesSendMessage(ctx, req)
-		if err != nil {
-			return fmt.Errorf("send message: %w", err)
-		}
+// SendFile sends a file (document).
+func (c *Client) SendFile(opts SendFileOptions) (*tgbotapi.Message, error) {
+	// Check file exists
+	if _, err := os.Stat(opts.FilePath); err != nil {
+		return nil, fmt.Errorf("file not found: %w", err)
+	}
 
-		// Extract sent message ID from updates
-		switch u := updates.(type) {
-		case *tg.Updates:
-			for _, update := range u.Updates {
-				if msgUpdate, ok := update.(*tg.UpdateMessageID); ok {
-					sentMsgID = msgUpdate.ID
-					break
-				}
-			}
-		case *tg.UpdateShortSentMessage:
-			sentMsgID = u.ID
-		}
+	doc := tgbotapi.NewDocument(opts.ChatID, tgbotapi.FilePath(opts.FilePath))
+	if opts.Caption != "" {
+		doc.Caption = opts.Caption
+	}
+	if opts.ReplyTo != 0 {
+		doc.ReplyToMessageID = opts.ReplyTo
+	}
 
-		return nil
-	})
+	sent, err := c.bot.Send(doc)
+	if err != nil {
+		return nil, fmt.Errorf("send file: %w", err)
+	}
 
-	return sentMsgID, err
+	return &sent, nil
+}
+
+// SendPhotoOptions for sending photos.
+type SendPhotoOptions struct {
+	ChatID   int64
+	FilePath string
+	Caption  string
+	ReplyTo  int
+}
+
+// SendPhoto sends a photo.
+func (c *Client) SendPhoto(opts SendPhotoOptions) (*tgbotapi.Message, error) {
+	if _, err := os.Stat(opts.FilePath); err != nil {
+		return nil, fmt.Errorf("file not found: %w", err)
+	}
+
+	photo := tgbotapi.NewPhoto(opts.ChatID, tgbotapi.FilePath(opts.FilePath))
+	if opts.Caption != "" {
+		photo.Caption = opts.Caption
+	}
+	if opts.ReplyTo != 0 {
+		photo.ReplyToMessageID = opts.ReplyTo
+	}
+
+	sent, err := c.bot.Send(photo)
+	if err != nil {
+		return nil, fmt.Errorf("send photo: %w", err)
+	}
+
+	return &sent, nil
+}
+
+// SetReactionOptions for setting reactions.
+type SetReactionOptions struct {
+	ChatID    int64
+	MessageID int
+	Emoji     string
+}
+
+// SetReaction sets a reaction on a message.
+func (c *Client) SetReaction(opts SetReactionOptions) error {
+	// Note: Bot API v5.5 doesn't have native reaction support
+	// Reactions require Bot API 7.0+ - would need to use raw API call
+	// For now, return not supported error
+	return fmt.Errorf("reactions require Bot API 7.0+ (upgrade telegram-bot-api library)")
 }

@@ -23,7 +23,7 @@ type App struct {
 	json          bool
 	allowUnauthed bool
 	store         *store.Store
-	tgClient      *tg.Client
+	client        *tg.Client
 }
 
 // New creates a new App instance.
@@ -32,33 +32,15 @@ func New(opts Options) (*App, error) {
 		return nil, fmt.Errorf("store directory is required")
 	}
 
+	// Ensure store directory exists
+	if err := os.MkdirAll(opts.StoreDir, 0755); err != nil {
+		return nil, fmt.Errorf("create store dir: %w", err)
+	}
+
 	// Open store
 	st, err := store.Open(opts.StoreDir)
 	if err != nil {
 		return nil, fmt.Errorf("open store: %w", err)
-	}
-
-	// Create Telegram client
-	appID := os.Getenv("TGCLI_APP_ID")
-	appHash := os.Getenv("TGCLI_APP_HASH")
-
-	if !opts.AllowUnauthed && (appID == "" || appHash == "") {
-		st.Close()
-		return nil, fmt.Errorf("TGCLI_APP_ID and TGCLI_APP_HASH environment variables are required")
-	}
-
-	var tgClient *tg.Client
-	if appID != "" && appHash != "" {
-		tgClient, err = tg.New(tg.Options{
-			StoreDir: opts.StoreDir,
-			AppID:    appID,
-			AppHash:  appHash,
-			Store:    st,
-		})
-		if err != nil {
-			st.Close()
-			return nil, fmt.Errorf("create telegram client: %w", err)
-		}
 	}
 
 	a := &App{
@@ -67,16 +49,47 @@ func New(opts Options) (*App, error) {
 		json:          opts.JSON,
 		allowUnauthed: opts.AllowUnauthed,
 		store:         st,
-		tgClient:      tgClient,
 	}
 
 	return a, nil
 }
 
+// Client returns or creates the Telegram client.
+func (a *App) Client() (*tg.Client, error) {
+	if a.client != nil {
+		return a.client, nil
+	}
+
+	token := tg.GetToken()
+	if token == "" && !a.allowUnauthed {
+		return nil, fmt.Errorf("TGCLI_BOT_TOKEN not set. Run 'tgcli auth' for help")
+	}
+	if token == "" {
+		return nil, fmt.Errorf("TGCLI_BOT_TOKEN environment variable is required")
+	}
+
+	client, err := tg.New(tg.Options{
+		StoreDir: a.storeDir,
+		Token:    token,
+		Store:    a.store,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	a.client = client
+	return client, nil
+}
+
+// Store returns the store.
+func (a *App) Store() *store.Store {
+	return a.store
+}
+
 // Close cleans up app resources.
 func (a *App) Close() {
-	if a.tgClient != nil {
-		a.tgClient.Close()
+	if a.client != nil {
+		a.client.Close()
 	}
 	if a.store != nil {
 		a.store.Close()
@@ -96,14 +109,4 @@ func (a *App) Version() string {
 // JSON returns whether JSON output is enabled.
 func (a *App) JSON() bool {
 	return a.json
-}
-
-// Store returns the store instance.
-func (a *App) Store() *store.Store {
-	return a.store
-}
-
-// TGClient returns the Telegram client instance.
-func (a *App) TGClient() *tg.Client {
-	return a.tgClient
 }

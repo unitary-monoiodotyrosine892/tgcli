@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
 )
@@ -9,40 +11,68 @@ import (
 func newChannelsCmd(flags *rootFlags) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "channels",
-		Short: "Channel operations (list, info)",
+		Short: "Channel operations (list stored channels)",
 	}
 
 	cmd.AddCommand(newChannelsListCmd(flags))
-	cmd.AddCommand(newChannelsInfoCmd(flags))
 
 	return cmd
 }
 
 func newChannelsListCmd(flags *rootFlags) *cobra.Command {
-	return &cobra.Command{
-		Use:   "list",
-		Short: "List channels",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Println("🚧 Channels list - coming soon")
-			return nil
-		},
-	}
-}
-
-func newChannelsInfoCmd(flags *rootFlags) *cobra.Command {
-	var chatID int64
+	var limit int
 
 	cmd := &cobra.Command{
-		Use:   "info",
-		Short: "Show channel details",
+		Use:   "list",
+		Short: "List channels from local database",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Printf("🚧 Channel info for %d - coming soon\n", chatID)
+			ctx, cancel := withTimeout(cmd.Context(), flags)
+			defer cancel()
+
+			a, lk, err := newApp(ctx, flags, false, true)
+			if err != nil {
+				return err
+			}
+			defer closeApp(a, lk)
+
+			chats, err := a.Store().ListChats(limit)
+			if err != nil {
+				return fmt.Errorf("list chats: %w", err)
+			}
+
+			// Filter to channels only
+			var channels []interface{}
+			for _, chat := range chats {
+				if chat.Type == "channel" {
+					channels = append(channels, chat)
+				}
+			}
+
+			if len(channels) == 0 {
+				if flags.asJSON {
+					return writeJSON(os.Stdout, []interface{}{})
+				}
+				fmt.Println("No channels found. Channels are stored after receiving messages via 'tgcli sync'.")
+				return nil
+			}
+
+			if flags.asJSON {
+				return writeJSON(os.Stdout, channels)
+			}
+
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "ID\tTITLE")
+			for _, chat := range chats {
+				if chat.Type == "channel" {
+					fmt.Fprintf(w, "%d\t%s\n", chat.ID, chat.Title)
+				}
+			}
+			w.Flush()
+
 			return nil
 		},
 	}
 
-	cmd.Flags().Int64Var(&chatID, "chat", 0, "channel chat ID (required)")
-	_ = cmd.MarkFlagRequired("chat")
-
+	cmd.Flags().IntVar(&limit, "limit", 100, "max channels to show")
 	return cmd
 }
