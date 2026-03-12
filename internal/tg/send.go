@@ -3,9 +3,16 @@ package tg
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
+
+// MaxFileSize is the maximum file size for uploads (50MB - Telegram limit)
+const MaxFileSize = 50 * 1024 * 1024
+
+// MaxMessageLength is the maximum message text length
+const MaxMessageLength = 4096
 
 // SendTextOptions for sending text messages.
 type SendTextOptions struct {
@@ -16,6 +23,14 @@ type SendTextOptions struct {
 
 // SendText sends a text message.
 func (c *Client) SendText(opts SendTextOptions) (*tgbotapi.Message, error) {
+	// Validate message length
+	if len(opts.Text) > MaxMessageLength {
+		return nil, fmt.Errorf("message too long (max %d characters)", MaxMessageLength)
+	}
+	if len(opts.Text) == 0 {
+		return nil, fmt.Errorf("message cannot be empty")
+	}
+
 	msg := tgbotapi.NewMessage(opts.ChatID, opts.Text)
 	if opts.ReplyTo != 0 {
 		msg.ReplyToMessageID = opts.ReplyTo
@@ -37,14 +52,53 @@ type SendFileOptions struct {
 	ReplyTo  int
 }
 
-// SendFile sends a file (document).
-func (c *Client) SendFile(opts SendFileOptions) (*tgbotapi.Message, error) {
-	// Check file exists
-	if _, err := os.Stat(opts.FilePath); err != nil {
-		return nil, fmt.Errorf("file not found: %w", err)
+// validateFilePath validates a file path for security.
+func validateFilePath(path string) error {
+	// Get absolute path to prevent path traversal
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return fmt.Errorf("invalid path: %w", err)
 	}
 
-	doc := tgbotapi.NewDocument(opts.ChatID, tgbotapi.FilePath(opts.FilePath))
+	// Check file exists and is a regular file
+	info, err := os.Stat(absPath)
+	if err != nil {
+		return fmt.Errorf("file not found: %w", err)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("path is a directory, not a file")
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("path is not a regular file")
+	}
+
+	// Check file size
+	if info.Size() > MaxFileSize {
+		return fmt.Errorf("file too large (max %d MB)", MaxFileSize/1024/1024)
+	}
+	if info.Size() == 0 {
+		return fmt.Errorf("file is empty")
+	}
+
+	return nil
+}
+
+// SendFile sends a file (document).
+func (c *Client) SendFile(opts SendFileOptions) (*tgbotapi.Message, error) {
+	// Validate file path
+	if err := validateFilePath(opts.FilePath); err != nil {
+		return nil, err
+	}
+
+	// Validate caption length
+	if len(opts.Caption) > MaxMessageLength {
+		return nil, fmt.Errorf("caption too long (max %d characters)", MaxMessageLength)
+	}
+
+	// Get absolute path
+	absPath, _ := filepath.Abs(opts.FilePath)
+
+	doc := tgbotapi.NewDocument(opts.ChatID, tgbotapi.FilePath(absPath))
 	if opts.Caption != "" {
 		doc.Caption = opts.Caption
 	}
@@ -70,11 +124,20 @@ type SendPhotoOptions struct {
 
 // SendPhoto sends a photo.
 func (c *Client) SendPhoto(opts SendPhotoOptions) (*tgbotapi.Message, error) {
-	if _, err := os.Stat(opts.FilePath); err != nil {
-		return nil, fmt.Errorf("file not found: %w", err)
+	// Validate file path
+	if err := validateFilePath(opts.FilePath); err != nil {
+		return nil, err
 	}
 
-	photo := tgbotapi.NewPhoto(opts.ChatID, tgbotapi.FilePath(opts.FilePath))
+	// Validate caption length
+	if len(opts.Caption) > MaxMessageLength {
+		return nil, fmt.Errorf("caption too long (max %d characters)", MaxMessageLength)
+	}
+
+	// Get absolute path
+	absPath, _ := filepath.Abs(opts.FilePath)
+
+	photo := tgbotapi.NewPhoto(opts.ChatID, tgbotapi.FilePath(absPath))
 	if opts.Caption != "" {
 		photo.Caption = opts.Caption
 	}

@@ -17,8 +17,14 @@ type Store struct {
 
 // Open opens or creates the store database.
 func Open(storeDir string) (*Store, error) {
-	if err := os.MkdirAll(storeDir, 0755); err != nil {
+	// Create store directory with restricted permissions (owner only)
+	if err := os.MkdirAll(storeDir, 0700); err != nil {
 		return nil, fmt.Errorf("create store dir: %w", err)
+	}
+
+	// Ensure directory has correct permissions even if it existed
+	if err := os.Chmod(storeDir, 0700); err != nil {
+		return nil, fmt.Errorf("set store dir permissions: %w", err)
 	}
 
 	dbPath := filepath.Join(storeDir, "tgcli.db")
@@ -47,6 +53,11 @@ func Open(storeDir string) (*Store, error) {
 	if err := s.migrate(); err != nil {
 		db.Close()
 		return nil, err
+	}
+
+	// Set database file permissions (owner read/write only)
+	if err := os.Chmod(dbPath, 0600); err != nil {
+		// Non-fatal, but log if we had logging
 	}
 
 	return s, nil

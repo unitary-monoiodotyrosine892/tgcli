@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -19,8 +20,16 @@ type Message struct {
 	UpdatedAt        int64
 }
 
+// MaxMessageLength is the maximum allowed message text length.
+const MaxMessageLength = 4096
+
 // InsertMessage inserts a new message.
 func (s *Store) InsertMessage(id, chatID, fromUserID int64, date time.Time, text string, replyToID int, mediaType, mediaPath string) error {
+	// Truncate text if too long (Telegram limit is 4096)
+	if len(text) > MaxMessageLength {
+		text = text[:MaxMessageLength]
+	}
+
 	now := time.Now().UTC().Unix()
 	dateUnix := date.Unix()
 
@@ -62,6 +71,10 @@ func (s *Store) ListMessages(chatID int64, limit int) ([]Message, error) {
 	if limit <= 0 {
 		limit = 50
 	}
+	// Cap limit to prevent abuse
+	if limit > 1000 {
+		limit = 1000
+	}
 
 	rows, err := s.db.Query(`
 		SELECT id, chat_id, from_user_id, date, text, reply_to_message_id, media_type, media_path, updated_at
@@ -91,14 +104,28 @@ func (s *Store) ListMessages(chatID int64, limit int) ([]Message, error) {
 	return messages, rows.Err()
 }
 
-// SearchMessages searches messages using LIKE.
+// escapeLikePattern escapes special characters in LIKE patterns to prevent injection.
+func escapeLikePattern(s string) string {
+	// Escape special LIKE characters: % _ \
+	s = strings.ReplaceAll(s, "\\", "\\\\")
+	s = strings.ReplaceAll(s, "%", "\\%")
+	s = strings.ReplaceAll(s, "_", "\\_")
+	return s
+}
+
+// SearchMessages searches messages using LIKE with proper escaping.
 func (s *Store) SearchMessages(query string, chatID int64, limit int) ([]Message, error) {
 	if limit <= 0 {
 		limit = 50
 	}
+	// Cap limit to prevent abuse
+	if limit > 1000 {
+		limit = 1000
+	}
 
-	// Use LIKE for simple text search
-	searchPattern := "%" + query + "%"
+	// Escape LIKE wildcards in user input to prevent LIKE injection
+	escapedQuery := escapeLikePattern(query)
+	searchPattern := "%" + escapedQuery + "%"
 
 	var rows *sql.Rows
 	var err error
@@ -107,7 +134,7 @@ func (s *Store) SearchMessages(query string, chatID int64, limit int) ([]Message
 		rows, err = s.db.Query(`
 			SELECT id, chat_id, from_user_id, date, text, reply_to_message_id, media_type, media_path, updated_at
 			FROM messages
-			WHERE text LIKE ? AND chat_id = ?
+			WHERE text LIKE ? ESCAPE '\' AND chat_id = ?
 			ORDER BY date DESC
 			LIMIT ?
 		`, searchPattern, chatID, limit)
@@ -115,7 +142,7 @@ func (s *Store) SearchMessages(query string, chatID int64, limit int) ([]Message
 		rows, err = s.db.Query(`
 			SELECT id, chat_id, from_user_id, date, text, reply_to_message_id, media_type, media_path, updated_at
 			FROM messages
-			WHERE text LIKE ?
+			WHERE text LIKE ? ESCAPE '\'
 			ORDER BY date DESC
 			LIMIT ?
 		`, searchPattern, limit)

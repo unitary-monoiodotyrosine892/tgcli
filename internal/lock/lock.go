@@ -15,14 +15,23 @@ type Lock struct {
 
 // Acquire attempts to acquire an exclusive lock on the store directory.
 func Acquire(storeDir string) (*Lock, error) {
-	if err := os.MkdirAll(storeDir, 0755); err != nil {
+	// Create store directory with restricted permissions (owner only)
+	if err := os.MkdirAll(storeDir, 0700); err != nil {
 		return nil, fmt.Errorf("create store dir: %w", err)
 	}
 
 	lockPath := filepath.Join(storeDir, "LOCK")
-	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0644)
+	
+	// Create lock file with restricted permissions (owner read/write only)
+	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, fmt.Errorf("open lock file: %w", err)
+	}
+
+	// Ensure correct permissions even if file existed
+	if err := os.Chmod(lockPath, 0600); err != nil {
+		f.Close()
+		return nil, fmt.Errorf("set lock file permissions: %w", err)
 	}
 
 	// Try to acquire exclusive lock (non-blocking)
