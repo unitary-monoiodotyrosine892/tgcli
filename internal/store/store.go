@@ -124,19 +124,19 @@ func (s *Store) migrate() error {
 }
 
 func migrateCoreSchema(s *Store) error {
-	_, err := s.db.Exec(`
-		CREATE TABLE chats (
+	// Create tables one at a time for better error handling
+	tables := []string{
+		`CREATE TABLE chats (
 			id INTEGER PRIMARY KEY,
-			type TEXT NOT NULL, -- user|group|channel|supergroup
+			type TEXT NOT NULL,
 			title TEXT,
 			username TEXT,
 			last_message_id INTEGER,
 			last_message_ts INTEGER,
 			unread_count INTEGER DEFAULT 0,
 			updated_at INTEGER NOT NULL
-		);
-
-		CREATE TABLE users (
+		)`,
+		`CREATE TABLE users (
 			id INTEGER PRIMARY KEY,
 			first_name TEXT,
 			last_name TEXT,
@@ -144,9 +144,8 @@ func migrateCoreSchema(s *Store) error {
 			phone TEXT,
 			is_bot INTEGER DEFAULT 0,
 			updated_at INTEGER NOT NULL
-		);
-
-		CREATE TABLE messages (
+		)`,
+		`CREATE TABLE messages (
 			id INTEGER PRIMARY KEY,
 			chat_id INTEGER NOT NULL,
 			from_user_id INTEGER,
@@ -155,31 +154,19 @@ func migrateCoreSchema(s *Store) error {
 			reply_to_message_id INTEGER,
 			media_type TEXT,
 			media_path TEXT,
-			updated_at INTEGER NOT NULL,
-			UNIQUE(id, chat_id),
-			FOREIGN KEY (chat_id) REFERENCES chats(id) ON DELETE CASCADE
-		);
+			updated_at INTEGER NOT NULL
+		)`,
+		`CREATE INDEX idx_messages_chat_date ON messages(chat_id, date DESC)`,
+		`CREATE INDEX idx_messages_from_user ON messages(from_user_id, date DESC)`,
+		`CREATE INDEX idx_messages_text ON messages(text)`,
+		`CREATE INDEX idx_chats_last_message ON chats(last_message_ts DESC)`,
+	}
 
-		CREATE TABLE messages_fts (
-			text TEXT
-		) USING fts5(text, content=messages, content_rowid=id);
+	for _, ddl := range tables {
+		if _, err := s.db.Exec(ddl); err != nil {
+			return fmt.Errorf("execute DDL: %w", err)
+		}
+	}
 
-		CREATE TRIGGER messages_fts_insert AFTER INSERT ON messages BEGIN
-			INSERT INTO messages_fts(rowid, text) VALUES (new.id, new.text);
-		END;
-
-		CREATE TRIGGER messages_fts_delete AFTER DELETE ON messages BEGIN
-			DELETE FROM messages_fts WHERE rowid = old.id;
-		END;
-
-		CREATE TRIGGER messages_fts_update AFTER UPDATE ON messages BEGIN
-			UPDATE messages_fts SET text = new.text WHERE rowid = new.id;
-		END;
-
-		CREATE INDEX idx_messages_chat_date ON messages(chat_id, date DESC);
-		CREATE INDEX idx_messages_from_user ON messages(from_user_id, date DESC);
-		CREATE INDEX idx_chats_last_message ON chats(last_message_ts DESC);
-	`)
-	
-	return err
+	return nil
 }

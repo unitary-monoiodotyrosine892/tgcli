@@ -1,6 +1,7 @@
 package store
 
 import (
+	"database/sql"
 	"fmt"
 	"time"
 )
@@ -45,10 +46,14 @@ func (s *Store) GetMessage(id int64) (*Message, error) {
 	`, id)
 
 	var msg Message
-	err := row.Scan(&msg.ID, &msg.ChatID, &msg.FromUserID, &msg.Date, &msg.Text, &msg.ReplyToMessageID, &msg.MediaType, &msg.MediaPath, &msg.UpdatedAt)
+	var text, mediaType, mediaPath sql.NullString
+	err := row.Scan(&msg.ID, &msg.ChatID, &msg.FromUserID, &msg.Date, &text, &msg.ReplyToMessageID, &mediaType, &mediaPath, &msg.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("get message: %w", err)
 	}
+	msg.Text = text.String
+	msg.MediaType = mediaType.String
+	msg.MediaPath = mediaPath.String
 	return &msg, nil
 }
 
@@ -73,42 +78,47 @@ func (s *Store) ListMessages(chatID int64, limit int) ([]Message, error) {
 	var messages []Message
 	for rows.Next() {
 		var msg Message
-		if err := rows.Scan(&msg.ID, &msg.ChatID, &msg.FromUserID, &msg.Date, &msg.Text, &msg.ReplyToMessageID, &msg.MediaType, &msg.MediaPath, &msg.UpdatedAt); err != nil {
+		var text, mediaType, mediaPath sql.NullString
+		if err := rows.Scan(&msg.ID, &msg.ChatID, &msg.FromUserID, &msg.Date, &text, &msg.ReplyToMessageID, &mediaType, &mediaPath, &msg.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
+		msg.Text = text.String
+		msg.MediaType = mediaType.String
+		msg.MediaPath = mediaPath.String
 		messages = append(messages, msg)
 	}
 
 	return messages, rows.Err()
 }
 
-// SearchMessages searches messages using FTS5.
+// SearchMessages searches messages using LIKE.
 func (s *Store) SearchMessages(query string, chatID int64, limit int) ([]Message, error) {
 	if limit <= 0 {
 		limit = 50
 	}
 
-	var rows interface{ Close() error }
+	// Use LIKE for simple text search
+	searchPattern := "%" + query + "%"
+
+	var rows *sql.Rows
 	var err error
 
 	if chatID != 0 {
 		rows, err = s.db.Query(`
-			SELECT m.id, m.chat_id, m.from_user_id, m.date, m.text, m.reply_to_message_id, m.media_type, m.media_path, m.updated_at
-			FROM messages m
-			JOIN messages_fts fts ON m.id = fts.rowid
-			WHERE fts.text MATCH ? AND m.chat_id = ?
-			ORDER BY m.date DESC
+			SELECT id, chat_id, from_user_id, date, text, reply_to_message_id, media_type, media_path, updated_at
+			FROM messages
+			WHERE text LIKE ? AND chat_id = ?
+			ORDER BY date DESC
 			LIMIT ?
-		`, query, chatID, limit)
+		`, searchPattern, chatID, limit)
 	} else {
 		rows, err = s.db.Query(`
-			SELECT m.id, m.chat_id, m.from_user_id, m.date, m.text, m.reply_to_message_id, m.media_type, m.media_path, m.updated_at
-			FROM messages m
-			JOIN messages_fts fts ON m.id = fts.rowid
-			WHERE fts.text MATCH ?
-			ORDER BY m.date DESC
+			SELECT id, chat_id, from_user_id, date, text, reply_to_message_id, media_type, media_path, updated_at
+			FROM messages
+			WHERE text LIKE ?
+			ORDER BY date DESC
 			LIMIT ?
-		`, query, limit)
+		`, searchPattern, limit)
 	}
 
 	if err != nil {
@@ -116,24 +126,18 @@ func (s *Store) SearchMessages(query string, chatID int64, limit int) ([]Message
 	}
 	defer rows.Close()
 
-	// Type assert to get Scan method
-	sqlRows, ok := rows.(interface {
-		Next() bool
-		Scan(...interface{}) error
-		Err() error
-	})
-	if !ok {
-		return nil, fmt.Errorf("unexpected rows type")
-	}
-
 	var messages []Message
-	for sqlRows.Next() {
+	for rows.Next() {
 		var msg Message
-		if err := sqlRows.Scan(&msg.ID, &msg.ChatID, &msg.FromUserID, &msg.Date, &msg.Text, &msg.ReplyToMessageID, &msg.MediaType, &msg.MediaPath, &msg.UpdatedAt); err != nil {
+		var text, mediaType, mediaPath sql.NullString
+		if err := rows.Scan(&msg.ID, &msg.ChatID, &msg.FromUserID, &msg.Date, &text, &msg.ReplyToMessageID, &mediaType, &mediaPath, &msg.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan message: %w", err)
 		}
+		msg.Text = text.String
+		msg.MediaType = mediaType.String
+		msg.MediaPath = mediaPath.String
 		messages = append(messages, msg)
 	}
 
-	return messages, sqlRows.Err()
+	return messages, rows.Err()
 }
