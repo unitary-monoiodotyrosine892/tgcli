@@ -17,6 +17,108 @@ Core implementation complete. Ready for integration testing.
 
 See `docs/spec.md` for the full design specification.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph User["User / CI Pipeline"]
+        CLI[tgcli CLI]
+    end
+
+    subgraph tgcli["tgcli Application"]
+        CMD[Commands<br/>auth, sync, send, etc.]
+        APP[App Layer]
+        TG[Telegram Client]
+        STORE[(SQLite Store)]
+    end
+
+    subgraph Telegram["Telegram"]
+        API[Bot API]
+        BOT[Your Bot<br/>@BotFather]
+        USERS[Users/Groups]
+    end
+
+    CLI --> CMD
+    CMD --> APP
+    APP --> TG
+    APP --> STORE
+    TG <-->|HTTPS| API
+    API <--> BOT
+    BOT <--> USERS
+
+    style CLI fill:#e1f5fe
+    style STORE fill:#fff3e0
+    style API fill:#e8f5e9
+```
+
+## Data Flow
+
+```mermaid
+sequenceDiagram
+    participant User as User/CI
+    participant CLI as tgcli
+    participant DB as SQLite
+    participant API as Telegram API
+    participant Bot as Bot
+
+    Note over User,Bot: Sending a Message
+    User->>CLI: tgcli send text --to 123 --message "Hi"
+    CLI->>API: POST /sendMessage
+    API->>Bot: Deliver message
+    Bot-->>API: Message sent
+    API-->>CLI: {message_id, chat_id, ...}
+    CLI-->>User: ✅ Message sent (ID: 456)
+
+    Note over User,Bot: Receiving Messages
+    User->>CLI: tgcli sync --follow
+    loop Long Polling
+        CLI->>API: GET /getUpdates
+        API-->>CLI: [new messages]
+        CLI->>DB: Store messages
+    end
+    CLI-->>User: [Chat] User: Hello!
+```
+
+## Project Structure
+
+```mermaid
+graph LR
+    subgraph cmd/tgcli
+        MAIN[main.go]
+        ROOT[root.go]
+        AUTH[auth.go]
+        SYNC[sync.go]
+        SEND[send.go]
+        MSGS[messages.go]
+        CHATS[chats.go]
+    end
+
+    subgraph internal
+        subgraph app
+            APPGO[app.go]
+        end
+        subgraph tg
+            CLIENT[client.go]
+            SENDTG[send.go]
+            SYNCTG[sync.go]
+        end
+        subgraph store
+            STOREDB[store.go]
+            CHATDB[chats.go]
+            MSGDB[messages.go]
+        end
+    end
+
+    MAIN --> ROOT
+    ROOT --> AUTH & SYNC & SEND & MSGS & CHATS
+    AUTH & SYNC & SEND --> APPGO
+    APPGO --> CLIENT & STOREDB
+    CLIENT --> SENDTG & SYNCTG
+
+    style cmd/tgcli fill:#e3f2fd
+    style internal fill:#f3e5f5
+```
+
 ## Install / Build
 
 ### Build locally
