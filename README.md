@@ -1,30 +1,31 @@
-# 🗃️ tgcli — Telegram CLI: sync, search, send
+# 🗃️ tgcli — Telegram CLI: sync, search, send.
 
-Telegram CLI built on top of `gotd`, focused on:
+Telegram CLI built on top of `telegram-bot-api`, focused on:
 
-- Best-effort local sync of message history + continuous capture
+- Receiving and storing messages locally
 - Fast offline search
-- Sending messages (text, files, reactions)
-- Chat, group, and channel management
-- **E2E testing for OpenClaw**
+- Sending messages (text, files, photos)
+- JSON output for E2E test automation
 
-This is a third-party tool that uses the Telegram MTProto API via gotd and is not affiliated with Telegram.
+**Built for [OpenClaw](https://github.com/anthropics/openclaw) E2E testing** — provides a scriptable CLI for automated Telegram channel testing.
+
+This is a third-party tool that uses the Telegram Bot API and is not affiliated with Telegram.
 
 ## Status
 
-🚧 **In Development** — Core implementation in progress.
+Core implementation complete. Ready for integration testing.
 
-See [docs/spec.md](docs/spec.md) for the full design specification.
+See `docs/spec.md` for the full design specification.
 
 ## Install / Build
 
 ### Build locally
 
 ```bash
-go build -tags sqlite_fts5 -o ./dist/tgcli ./cmd/tgcli
+go build -o ./dist/tgcli ./cmd/tgcli
 ```
 
-Run (local build):
+Run:
 
 ```bash
 ./dist/tgcli --help
@@ -35,35 +36,100 @@ Run (local build):
 Default store directory is `~/.tgcli` (override with `--store DIR`).
 
 ```bash
-# 1) Authenticate (prompts for phone + code), then bootstrap sync
+# 1) Set your bot token (get one from @BotFather on Telegram)
+export TGCLI_BOT_TOKEN="your_bot_token_here"
+
+# 2) Validate token and check connectivity
+./dist/tgcli doctor
 ./dist/tgcli auth
 
-# 2) Keep syncing (never prompts; requires prior auth)
+# 3) Listen for incoming messages
 ./dist/tgcli sync --follow
 
-# Diagnostics
-./dist/tgcli doctor
+# 4) Send a message
+./dist/tgcli send text --to 123456789 --message "Hello from tgcli!"
 
-# Search messages
-./dist/tgcli messages search "meeting"
+# 5) Send a file
+./dist/tgcli send file --to 123456789 --file ./pic.jpg --caption "Check this out"
 
-# Send a message
-./dist/tgcli send text --to 123456789 --message "hello"
-
-# Send a file
-./dist/tgcli send file --to 123456789 --file ./pic.jpg --caption "check this"
-
-# List chats
+# 6) List stored chats
 ./dist/tgcli chats list
 
-# List messages in a chat
-./dist/tgcli messages list --chat 123456789
+# 7) Search messages
+./dist/tgcli messages search "meeting"
+```
+
+## E2E Testing with OpenClaw
+
+`tgcli` is designed for automated E2E testing of Telegram integrations. All commands support `--json` for machine-readable output.
+
+### Example: CI/CD Test Script
+
+```bash
+#!/bin/bash
+set -e
+
+export TGCLI_BOT_TOKEN="$TEST_BOT_TOKEN"
+TEST_CHAT_ID="$TELEGRAM_TEST_CHAT_ID"
+
+# Send test message
+RESULT=$(./dist/tgcli send text --to "$TEST_CHAT_ID" --message "E2E test $(date)" --json)
+MESSAGE_ID=$(echo "$RESULT" | jq -r '.message_id')
+echo "Sent message ID: $MESSAGE_ID"
+
+# Wait for response and sync
+sleep 5
+./dist/tgcli sync
+
+# Verify message was stored
+./dist/tgcli messages list --chat "$TEST_CHAT_ID" --json | jq '.[-1]'
+
+# Search for expected content
+FOUND=$(./dist/tgcli messages search "E2E test" --json | jq 'length')
+if [ "$FOUND" -gt 0 ]; then
+  echo "✅ E2E test passed"
+else
+  echo "❌ E2E test failed"
+  exit 1
+fi
+```
+
+### GitHub Actions Example
+
+```yaml
+name: Telegram E2E Tests
+
+on: [push, pull_request]
+
+jobs:
+  telegram-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      
+      - name: Build tgcli
+        run: go build -o ./dist/tgcli ./cmd/tgcli
+      
+      - name: Run E2E Tests
+        env:
+          TGCLI_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TEST_CHAT_ID: ${{ secrets.TELEGRAM_TEST_CHAT_ID }}
+        run: |
+          ./dist/tgcli doctor
+          ./dist/tgcli send text --to "$TEST_CHAT_ID" --message "CI test" --json
 ```
 
 ## High-level UX
 
-- `tgcli auth`: interactive login (phone + code), then immediately performs initial data sync
-- `tgcli sync`: non-interactive sync loop (never prompts; errors if not authenticated)
+- `tgcli auth`: validates bot token and displays bot info
+- `tgcli doctor`: checks token, store, and connectivity
+- `tgcli sync`: receives messages (use `--follow` for continuous)
+- `tgcli send`: sends text or files to a chat
 - Output is human-readable by default; pass `--json` for machine-readable output
 
 ## Storage
@@ -72,56 +138,50 @@ Defaults to `~/.tgcli` (override with `--store DIR`).
 
 ```
 ~/.tgcli/
-├── session.json    # Telegram session data
-├── tgcli.db        # Messages, chats, FTS index
-├── media/          # Downloaded media files
-└── LOCK            # Single-instance lock
+├── tgcli.db     # SQLite database (chats, messages)
+└── media/       # Downloaded media files (future)
 ```
 
-## Environment overrides
+## Environment Variables
 
-- `TGCLI_PHONE`: pre-fill phone number for auth (for testing)
-- `TGCLI_APP_ID`: override Telegram API app ID
-- `TGCLI_APP_HASH`: override Telegram API app hash
+- `TGCLI_BOT_TOKEN`: **Required.** Your Telegram bot token from @BotFather.
 
-## E2E Testing
+## Commands Reference
 
-Designed for OpenClaw integration testing:
+| Command | Description |
+|---------|-------------|
+| `auth` | Validate bot token and show bot info |
+| `doctor` | Check configuration and connectivity |
+| `sync [--follow]` | Receive messages (continuous with --follow) |
+| `send text --to ID --message MSG` | Send text message |
+| `send file --to ID --file PATH` | Send file/document |
+| `chats list` | List stored chats |
+| `messages list --chat ID` | List messages in a chat |
+| `messages search QUERY` | Search messages |
+| `groups list` | List stored groups |
+| `channels list` | List stored channels |
 
-```bash
-# Authenticate once
-tgcli auth
+All commands support `--json` for machine-readable output.
 
-# Send test message
-tgcli send text --to 123456789 --message "E2E test" --json
+## Bot API vs MTProto
 
-# Verify receipt
-tgcli messages list --chat 123456789 --json | jq '.messages[-1]'
+This CLI uses the **Telegram Bot API** (not MTProto) for simplicity and reliability:
 
-# Search
-tgcli messages search "E2E test" --json
-```
+| Aspect | Bot API (tgcli) | MTProto (gotd) |
+|--------|-----------------|----------------|
+| Auth | Bot token from @BotFather | Phone + code |
+| Build | Fast, lightweight | Slow, 4GB+ RAM |
+| Messages | Only messages TO the bot | All messages |
+| Use case | Bots, automation, testing | Full client |
 
-All commands support `--json` for easy parsing in test scripts.
+For E2E testing, Bot API is ideal — you control the test bot and can verify message flow.
 
 ## Prior Art / Credit
 
-This project is heavily inspired by the excellent `wacli` by Peter Steinberger:
-- [wacli](https://github.com/steipete/wacli)
+This project is inspired by the excellent `wacli` by Peter Steinberger:
 
-## Development
-
-```bash
-# Run tests
-go test -tags sqlite_fts5 ./...
-
-# Build
-go build -tags sqlite_fts5 -o ./dist/tgcli ./cmd/tgcli
-
-# Run
-./dist/tgcli --help
-```
+- [`wacli`](https://github.com/steipete/wacli) — WhatsApp CLI
 
 ## License
 
-See [LICENSE](LICENSE).
+See `LICENSE`.
