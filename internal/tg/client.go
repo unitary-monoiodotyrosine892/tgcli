@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/RandyVentures/tgcli/internal/store"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 // Client wraps the Telegram Bot API client and provides integrated message storage.

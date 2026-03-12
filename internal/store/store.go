@@ -44,7 +44,7 @@ func Open(storeDir string) (*Store, error) {
 	}
 
 	dbPath := filepath.Join(storeDir, "tgcli.db")
-	
+
 	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
@@ -61,8 +61,8 @@ func Open(storeDir string) (*Store, error) {
 		"PRAGMA synchronous=NORMAL",
 		"PRAGMA foreign_keys=ON",
 		"PRAGMA busy_timeout=5000", // 5 second busy timeout
-		"PRAGMA cache_size=-64000",  // 64MB cache
-		"PRAGMA temp_store=MEMORY",  // Store temp tables in memory
+		"PRAGMA cache_size=-64000", // 64MB cache
+		"PRAGMA temp_store=MEMORY", // Store temp tables in memory
 	}
 
 	for _, pragma := range pragmas {
@@ -231,7 +231,7 @@ func migrateFTSAndIndices(s *Store) error {
 			`CREATE INDEX IF NOT EXISTS idx_messages_media_type ON messages(media_type) WHERE media_type IS NOT NULL AND media_type != ''`,
 			`CREATE INDEX IF NOT EXISTS idx_users_username ON users(username) WHERE username IS NOT NULL AND username != ''`,
 		}
-		
+
 		for _, ddl := range additionalIndices {
 			if _, err := s.db.Exec(ddl); err != nil {
 				return fmt.Errorf("create index: %w", err)

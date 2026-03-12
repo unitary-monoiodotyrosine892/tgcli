@@ -89,7 +89,7 @@ func (s *Store) ListMessages(ctx context.Context, params ListMessagesParams) ([]
 		SELECT id, chat_id, from_user_id, date, text, reply_to_message_id, media_type, media_path, updated_at
 		FROM messages
 		WHERE chat_id = ?`
-	
+
 	args := []interface{}{params.ChatID}
 
 	if params.Before != nil {
@@ -188,7 +188,7 @@ func (s *Store) searchMessagesFTS(ctx context.Context, params SearchMessagesPara
 		FROM messages_fts
 		JOIN messages m ON messages_fts.rowid = m.rowid
 		WHERE messages_fts MATCH ?`
-	
+
 	args := []interface{}{params.Query}
 
 	if params.ChatID != 0 {
@@ -252,7 +252,7 @@ func (s *Store) searchMessagesLIKE(ctx context.Context, params SearchMessagesPar
 		SELECT id, chat_id, from_user_id, date, text, reply_to_message_id, media_type, media_path, updated_at
 		FROM messages
 		WHERE text LIKE ? ESCAPE '\'`
-	
+
 	args := []interface{}{searchPattern}
 
 	if params.ChatID != 0 {

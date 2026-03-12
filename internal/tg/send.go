@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/RandyVentures/tgcli/internal/config"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 // SendTextOptions for sending text messages.

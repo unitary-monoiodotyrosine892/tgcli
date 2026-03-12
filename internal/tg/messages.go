@@ -3,8 +3,8 @@ package tg
 import (
 	"fmt"
 
-	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"github.com/RandyVentures/tgcli/internal/config"
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api/v5"
 )
 
 // EditMessageOptions for editing messages.
@@ -24,7 +24,7 @@ func (c *Client) EditMessage(opts EditMessageOptions) (*tgbotapi.Message, error)
 	}
 
 	edit := tgbotapi.NewEditMessageText(opts.ChatID, opts.MessageID, opts.Text)
-	
+
 	result, err := c.bot.Send(edit)
 	if err != nil {
 		return nil, fmt.Errorf("edit message: %w", err)
@@ -42,7 +42,7 @@ type DeleteMessageOptions struct {
 // DeleteMessage deletes a message.
 func (c *Client) DeleteMessage(opts DeleteMessageOptions) error {
 	del := tgbotapi.NewDeleteMessage(opts.ChatID, opts.MessageID)
-	
+
 	_, err := c.bot.Request(del)
 	if err != nil {
 		return fmt.Errorf("delete message: %w", err)
@@ -61,7 +61,7 @@ type ForwardMessageOptions struct {
 // ForwardMessage forwards a message.
 func (c *Client) ForwardMessage(opts ForwardMessageOptions) (*tgbotapi.Message, error) {
 	fwd := tgbotapi.NewForward(opts.ToChatID, opts.FromChatID, opts.MessageID)
-	
+
 	result, err := c.bot.Send(fwd)
 	if err != nil {
 		return nil, fmt.Errorf("forward message: %w", err)
@@ -82,7 +82,7 @@ func (c *Client) GetChat(opts GetChatOptions) (*tgbotapi.Chat, error) {
 			ChatID: opts.ChatID,
 		},
 	}
-	
+
 	chat, err := c.bot.GetChat(chatConfig)
 	if err != nil {
 		return nil, fmt.Errorf("get chat: %w", err)

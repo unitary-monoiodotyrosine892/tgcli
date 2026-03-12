@@ -52,7 +52,7 @@ func TestWriteErrorNil(t *testing.T) {
 func TestWriteJSON(t *testing.T) {
 	var buf bytes.Buffer
 	data := map[string]interface{}{
-		"name": "test",
+		"name":  "test",
 		"count": 42,
 	}
 

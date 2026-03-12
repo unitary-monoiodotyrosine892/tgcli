@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/RandyVentures/tgcli/internal/tg"
+	"github.com/spf13/cobra"
 )
 
 func newSendCmd(flags *rootFlags) *cobra.Command {

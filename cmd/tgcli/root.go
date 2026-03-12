@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/RandyVentures/tgcli/internal/app"
 	"github.com/RandyVentures/tgcli/internal/config"
 	"github.com/RandyVentures/tgcli/internal/lock"
 	"github.com/RandyVentures/tgcli/internal/out"
+	"github.com/spf13/cobra"
 )
 
 var version = "0.1.0"

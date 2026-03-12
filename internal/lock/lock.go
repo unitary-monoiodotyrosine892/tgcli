@@ -21,7 +21,7 @@ func Acquire(storeDir string) (*Lock, error) {
 	}
 
 	lockPath := filepath.Join(storeDir, "LOCK")
-	
+
 	// Create lock file with restricted permissions (owner read/write only)
 	f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/RandyVentures/tgcli/internal/tg"
+	"github.com/spf13/cobra"
 )
 
 func newDoctorCmd(flags *rootFlags) *cobra.Command {
@@ -60,9 +60,9 @@ func newDoctorCmd(flags *rootFlags) *cobra.Command {
 
 			if flags.asJSON {
 				return writeJSON(os.Stdout, map[string]interface{}{
-					"token_set":   true,
-					"store_dir":   a.StoreDir(),
-					"bot_id":      me.ID,
+					"token_set":    true,
+					"store_dir":    a.StoreDir(),
+					"bot_id":       me.ID,
 					"bot_username": me.UserName,
 					"stored_chats": len(chats),
 				})
